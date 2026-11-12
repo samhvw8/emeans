@@ -107,7 +107,10 @@ within a row.
 | After: `emeans` with `cuda` on x86_64 Linux | 53 | not measured |
 
 Dependencies counted with `cargo tree -e normal,build`, unique packages. Tests after the split: all
-pass on macOS (Metal contract at the production shape included); the CUDA tests were not run on a
-GPU at the time of the split, only compiled and linted for Linux with `cuda`.
+pass on macOS (Metal contract at the production shape included). On Linux with an RTX 3060
+(sm_86), `cargo test --workspace --features emeans/cuda,emeans-cluster/cuda` passes, including the
+CUDA contract at the production shape, the FP16-screen bit-equality test on near ties and the
+rebinding test; the release contract passes for the CPU (`CpuKernel::Gemm`) and CUDA backends; clippy
+with `cuda` is clean (2026-11-13).
 
 [^workspace]: Root `Cargo.toml` and the five crate manifests, 2026-11-12.
