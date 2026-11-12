@@ -1,0 +1,21 @@
+[tools]
+rust = "1.99.1"
+# Python reference scripts in bench/py (uv run --script)
+uv = "latest"
+
+[tasks.check]
+description = "Format check, clippy (also the candle baselines) and tests"
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+  "cargo clippy -p emeans-bench --all-targets --features baselines -- -D warnings",
+  "cargo test --workspace",
+]
+
+[tasks.test]
+description = "Run the tests of every crate (GPU tests skip without a device)"
+run = "cargo test --workspace"
+
+[tasks."test:cuda"]
+description = "Run the tests with the CUDA backend (needs a CUDA driver and device)"
+run = "cargo test --workspace --features emeans/cuda,emeans-cluster/cuda"

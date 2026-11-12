@@ -1,0 +1,31 @@
+[package]
+name = "emeans-cluster"
+description = "Algorithms on e-means: automatic k (two levels), incremental assignment, near-duplicate groups, exact kNN, metrics, synthetic data"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+# The CUDA backend (Backend::Cuda, Backend::CudaBf16).
+cuda = ["dep:emeans-cuda"]
+
+[dependencies]
+emeans-core.workspace = true
+emeans-cuda = { workspace = true, optional = true }
+anyhow.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Metal is chosen by target, not by a feature.
+[target.'cfg(target_os = "macos")'.dependencies]
+emeans-metal.workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["float_roundtrip"] }

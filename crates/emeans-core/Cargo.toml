@@ -1,0 +1,25 @@
+[package]
+name = "emeans-core"
+description = "e-means core: the backend op contract, CPU backend, f64 reference and device-resident training loop"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Accelerate (macOS) needs no crate; other targets multiply with `gemm`.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+gemm.workspace = true
+
+[dev-dependencies]
+# Exact float parsing for the reference fixtures (the default parser can be 1 ulp off).
+serde_json = { workspace = true, features = ["float_roundtrip"] }

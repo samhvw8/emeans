@@ -1,0 +1,37 @@
+[package]
+name = "emeans-metal"
+description = "e-means Metal backend: fused top-1 and top-k kernels and the device ops of emeans-core"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+emeans-core.workspace = true
+anyhow.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation = { workspace = true, features = ["std", "NSString", "NSError"] }
+objc2-metal = { workspace = true, features = [
+  "std",
+  # newBufferWithBytesNoCopy's deallocator block (zero-copy bind_shared)
+  "block2",
+  # MTLCommandBuffer GPUStartTime / GPUEndTime (the profile)
+  "objc2-core-foundation",
+  "MTLAllocation",
+  "MTLBuffer",
+  "MTLCommandBuffer",
+  "MTLCommandEncoder",
+  "MTLCommandQueue",
+  "MTLComputeCommandEncoder",
+  "MTLComputePipeline",
+  "MTLDevice",
+  "MTLLibrary",
+  "MTLResource",
+  "MTLTypes",
+] }

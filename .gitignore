@@ -1,0 +1,16 @@
+# Rust
+/target/
+/target-*/
+
+# Python envs and caches
+.venv/
+__pycache__/
+*.pyc
+
+# Local env
+.env
+.env.*
+.DS_Store
+
+# Synthetic benchmark data (regenerate with bench/py/gen_data.py)
+/bench/data/

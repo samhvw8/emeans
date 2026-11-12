@@ -1,0 +1,30 @@
+[package]
+name = "emeans-cuda"
+description = "e-means CUDA backend: NVRTC-compiled fused top-1, top-k and device ops on cudarc"
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+emeans-core.workspace = true
+anyhow.workspace = true
+# Dynamic loading (the default fallback): builds without a CUDA toolkit and
+# loads libcuda/libnvrtc at run time. With candle's `cuda` feature in the same
+# binary, Cargo unifies this to candle's `dynamic-linking`, which wins.
+# `fallback-latest`: no `nvcc` at build time (CPU-only machines) is not an error.
+cudarc = { workspace = true, features = [
+  "std",
+  "driver",
+  "nvrtc",
+  "cuda-version-from-build-system",
+  "fallback-latest",
+  "fallback-dynamic-loading",
+] }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["float_roundtrip"] }

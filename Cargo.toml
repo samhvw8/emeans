@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/emeans-core",
+  "crates/emeans-metal",
+  "crates/emeans-cuda",
+  "crates/emeans-cluster",
+  "crates/emeans",
+  "bench",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samhvw8/emeans"
+authors = ["Sam Hoang"]
+keywords = ["kmeans", "clustering", "metal", "cuda", "embeddings"]
+categories = ["algorithms", "science"]
+
+[workspace.dependencies]
+emeans-core = { path = "crates/emeans-core", version = "0.1.0" }
+emeans-metal = { path = "crates/emeans-metal", version = "0.1.0" }
+emeans-cuda = { path = "crates/emeans-cuda", version = "0.1.0" }
+emeans-cluster = { path = "crates/emeans-cluster", version = "0.1.0" }
+emeans = { path = "crates/emeans", version = "0.1.0" }
+anyhow = "1.0.104"
+rayon = "1.12.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# The CPU GEMM off macOS: the version and features candle-core 0.11.1 uses, so a
+# binary that also has candle compiles one copy (and the same numerics).
+gemm = { version = "0.19.0", features = ["wasm-simd128-enable"] }
+objc2 = "0.6.5"
+objc2-foundation = { version = "0.3.2", default-features = false }
+objc2-metal = { version = "0.3.2", default-features = false }
+# The version candle-core 0.11.1 uses, so a binary with candle's CUDA backend
+# builds one cudarc.
+cudarc = { version = "0.19.10", default-features = false }
+# Bench baselines only (feature `baselines` of emeans-bench).
+candle-core = "0.11.1"
+
+[profile.release]
+debug = 1
