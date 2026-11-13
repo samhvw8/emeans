@@ -13,17 +13,18 @@
 //! - the end: positions, masses and closing sums.
 //!
 //! The row order is the MT19937 permutation of each epoch, computed on the host
-//! by a helper thread (one epoch ahead) and uploaded once per epoch. Every
+//! by a helper thread (one epoch ahead; inline on targets without threads, see
+//! [`crate::exec`]) and uploaded once per epoch. Every
 //! number that drives a decision is the same f32/f64 arithmetic as the
 //! streaming API, so the CPU backend reproduces it bit for bit.
 
 use std::sync::mpsc;
-use std::time::Instant;
 
 use anyhow::{Context, Result, ensure};
 
 use super::{Device, EmaStep, Mat, Select, closing_means, plan_revival};
 use crate::assign::Metric;
+use crate::exec::{self, Instant};
 use crate::model::EpochStats;
 use crate::recipe::{self, CHECK_UNUSED_EVERY, Recipe};
 use crate::rng::RandomState;
@@ -44,7 +45,7 @@ pub struct Job<'a> {
     pub verbose: bool,
     pub start: Instant,
     /// Epoch 0's permutation, already being drawn (see `model::train_rows`).
-    pub first_order: Option<std::thread::JoinHandle<Vec<u32>>>,
+    pub first_order: Option<exec::Task<Vec<u32>>>,
 }
 
 pub struct Outcome {
@@ -111,20 +112,28 @@ pub fn run<D: Device>(dev: &mut D, job: Job<'_>) -> Result<Outcome> {
         let mut first_order = first_order;
         let skip_first = first_order.is_some() as usize;
         // One epoch's permutation ahead of the device.
+        // Without threads, each epoch draws its own permutation when it starts.
         let (tx, rx) = mpsc::sync_channel::<Vec<u32>>(1);
-        scope.spawn(move || {
-            for e in skip_first..n_epochs {
-                let p = RandomState::new(recipe::epoch_seed(seed, e)).permutation(n);
-                if tx.send(p).is_err() {
-                    return;
+        if exec::THREADS {
+            scope.spawn(move || {
+                for e in skip_first..n_epochs {
+                    let p = RandomState::new(recipe::epoch_seed(seed, e)).permutation(n);
+                    if tx.send(p).is_err() {
+                        return;
+                    }
                 }
-            }
-        });
+            });
+        } else {
+            drop(tx);
+        }
         for (epoch, &rows) in recipe.epoch_rows.iter().enumerate() {
             let order = match (epoch, first_order.take()) {
                 (0, Some(h)) => h
                     .join()
                     .map_err(|_| anyhow::anyhow!("permutation thread panicked"))?,
+                _ if !exec::THREADS => {
+                    RandomState::new(recipe::epoch_seed(seed, epoch)).permutation(n)
+                }
                 _ => rx.recv().context("permutation thread stopped")?,
             };
             let last = epoch + 1 == n_epochs;
@@ -212,7 +221,7 @@ pub fn run<D: Device>(dev: &mut D, job: Job<'_>) -> Result<Outcome> {
             let order = last.then_some(order);
             // The last pass writes the captured labels itself.
             let mut all = if last { all_labels.take() } else { None };
-            pending = Some(scope.spawn(move || {
+            pending = Some(exec::spawn_scoped(scope, move || {
                 let mut obj_epoch = 0f64;
                 for b in (0..rows).step_by(bsz) {
                     let e = (b + bsz).min(rows);
@@ -296,7 +305,7 @@ pub fn run<D: Device>(dev: &mut D, job: Job<'_>) -> Result<Outcome> {
 /// The last pass's label counts and, when captured, every row's label.
 type LastPass = (Vec<u64>, Option<Vec<i32>>);
 type EpochResult = Result<(EpochStats, Option<LastPass>)>;
-type Pending<'s> = std::thread::ScopedJoinHandle<'s, EpochResult>;
+type Pending<'s> = exec::ScopedTask<'s, EpochResult>;
 
 /// Take one epoch's statistics from its helper thread, in epoch order.
 fn collect(

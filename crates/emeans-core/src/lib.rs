@@ -17,6 +17,7 @@
 //! - [`rng`]: numpy legacy `RandomState`, for runs that match faiss draw for draw.
 //! - [`knn`]: the CPU exact top-k search and [`Neighbors`].
 //! - [`io`]: save and load a model.
+//! - [`exec`]: helper threads and the clock (inline and `performance.now()` on wasm).
 //!
 //! Backends live in `emeans-metal` and `emeans-cuda`; the algorithms on top
 //! (automatic k, dedup, incremental) in `emeans-cluster`; the `emeans` crate
@@ -24,6 +25,7 @@
 
 pub mod assign;
 pub mod core;
+pub mod exec;
 pub mod io;
 pub mod knn;
 pub mod model;

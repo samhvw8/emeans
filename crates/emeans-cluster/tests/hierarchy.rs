@@ -82,6 +82,17 @@ fn incremental_adds_keep_ids_and_survive_save_load() {
     assert_eq!(h2.chosen_k(), h.chosen_k());
     std::fs::remove_dir_all(&dir).unwrap();
 
+    // The same through one byte blob; a cut or padded blob fails.
+    let blob = h.to_bytes().unwrap();
+    let h3 = Hierarchy::from_bytes(&blob, CPU).unwrap();
+    assert_eq!(h3.assign(&data.x[..n0 * d]).unwrap(), l0);
+    assert_eq!(h3.chosen_k(), h.chosen_k());
+    assert_eq!(h3.to_bytes().unwrap(), blob);
+    assert!(Hierarchy::from_bytes(&blob[..blob.len() - 1], CPU).is_err());
+    let mut padded = blob.clone();
+    padded.push(0);
+    assert!(Hierarchy::from_bytes(&padded, CPU).is_err());
+
     // Rows are append-only.
     assert!(h.add(&data.x, n0 + 1).is_err());
 

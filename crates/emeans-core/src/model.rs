@@ -5,7 +5,6 @@
 //! f64 and cast to f32 where numpy casts it (NEP 50 weak Python scalars).
 
 use std::sync::Mutex;
-use std::time::Instant;
 
 use anyhow::{Context, Result, bail, ensure};
 use rayon::prelude::*;
@@ -14,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::assign::{Assigner, CpuAssigner, Metric, Rows};
 use crate::core::cpu::{add_rows, ema_host};
 use crate::core::{EmaStep, apply_splits, closing_means, plan_revival};
+use crate::exec::Instant;
 use crate::recipe::{
     self, BatchLaw, CHECK_UNUSED_EVERY, DEFAULT_ASSIGNMENT_CHUNK, INIT_USAGE, Recipe,
 };
@@ -781,7 +781,7 @@ impl Emeans {
         // The device loop's first epoch order, drawn while the init runs (both
         // are full MT19937 permutations of n). Unused without an engine.
         let seed0 = recipe::epoch_seed(self.config.seed, 0);
-        let first = std::thread::spawn(move || RandomState::new(seed0).permutation(n));
+        let first = crate::exec::spawn(move || RandomState::new(seed0).permutation(n));
         match (state, init) {
             (Some((p, u)), _) => self.begin_with_state(n, &p, &u)?,
             (None, Some(c)) => self.begin(n, c)?,
@@ -815,7 +815,7 @@ impl Emeans {
     fn train_device(
         &mut self,
         x: &[f32],
-        first: std::thread::JoinHandle<Vec<u32>>,
+        first: crate::exec::Task<Vec<u32>>,
     ) -> Result<Option<Trained>> {
         let mut first = Some(first);
         let recipe = self.recipe.clone().context("no run started")?;

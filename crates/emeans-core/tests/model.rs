@@ -170,8 +170,18 @@ fn save_load_roundtrip_and_resume() {
     );
     assert_eq!(l.iteration_stats().len(), 2);
 
-    // A truncated file fails loudly.
+    // to_bytes is the file's content; from_bytes_with reads it back.
     let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(m.to_bytes().unwrap(), bytes);
+    let fb = Emeans::from_bytes_with(&bytes, cpu()).unwrap();
+    assert_eq!(fb.centroids(), m.centroids());
+    assert_eq!(fb.ema_state(), m.ema_state());
+    assert!(Emeans::from_bytes_with(&bytes[..bytes.len() - 1], cpu()).is_err());
+    let mut huge = bytes.clone();
+    huge[8..16].copy_from_slice(&u64::MAX.to_le_bytes());
+    assert!(Emeans::from_bytes_with(&huge, cpu()).is_err());
+
+    // A truncated file fails loudly.
     std::fs::write(&path, &bytes[..bytes.len() - 4]).unwrap();
     assert!(Emeans::load(&path).is_err());
     std::fs::remove_dir_all(&dir).unwrap();

@@ -20,6 +20,10 @@ serde_json.workspace = true
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 gemm.workspace = true
 
+# WebAssembly has no std::time::Instant: web-time reads performance.now().
+[target.'cfg(target_family = "wasm")'.dependencies]
+web-time = "1.1.0"
+
 [dev-dependencies]
 # Exact float parsing for the reference fixtures (the default parser can be 1 ulp off).
 serde_json = { workspace = true, features = ["float_roundtrip"] }

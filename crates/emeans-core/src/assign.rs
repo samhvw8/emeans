@@ -245,9 +245,13 @@ impl CpuKernel {
     }
 
     /// The fastest kernel measured on this machine (see `.okf/design/emeans-algorithm.md`).
+    /// On WebAssembly: `Gemm` (simd128; 12x faster than `Fused`, whose `mul_add` is a
+    /// software call there, see `.okf/design/web.md`); `Fused` gives native bits.
     pub fn fastest() -> CpuKernel {
         if cfg!(target_os = "macos") {
             CpuKernel::Accelerate
+        } else if cfg!(target_family = "wasm") {
+            CpuKernel::Gemm
         } else if cfg!(target_arch = "x86_64") {
             CpuKernel::Fused
         } else {

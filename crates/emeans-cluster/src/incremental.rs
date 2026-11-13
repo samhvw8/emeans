@@ -876,7 +876,79 @@ impl Hierarchy {
                 m.save(tmp.join(format!("group-{g}.emeans")))?;
             }
         }
-        let manifest = Manifest {
+        fs::write(
+            tmp.join("hierarchy.json"),
+            serde_json::to_vec_pretty(&self.manifest())?,
+        )?;
+        let old = dir.with_extension("old");
+        if old.exists() {
+            fs::remove_dir_all(&old)?;
+        }
+        if dir.exists() {
+            fs::rename(dir, &old)?;
+        }
+        fs::rename(&tmp, dir)?;
+        if old.exists() {
+            fs::remove_dir_all(&old)?;
+        }
+        Ok(())
+    }
+
+    /// The hierarchy as one byte blob, for a store without a file system:
+    /// magic `EMHIER\0\x01`, u64 manifest length, the manifest JSON (as in
+    /// `hierarchy.json`), then each model as u64 length + model file bytes
+    /// (level 1, then every group with a model, in group order). Little-endian.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let json = serde_json::to_vec(&self.manifest())?;
+        let mut buf = Vec::new();
+        buf.extend_from_slice(BLOB_MAGIC);
+        buf.extend_from_slice(&(json.len() as u64).to_le_bytes());
+        buf.extend_from_slice(&json);
+        let models = std::iter::once(&self.level1)
+            .chain(self.groups.iter().filter_map(|g| g.model.as_ref()));
+        for m in models {
+            let b = m.to_bytes()?;
+            buf.extend_from_slice(&(b.len() as u64).to_le_bytes());
+            buf.extend_from_slice(&b);
+        }
+        Ok(buf)
+    }
+
+    /// Read a hierarchy from the bytes of [`Hierarchy::to_bytes`].
+    pub fn from_bytes(b: &[u8], backend: Backend) -> Result<Hierarchy> {
+        ensure!(
+            b.len() >= 8 && &b[..8] == BLOB_MAGIC,
+            "not an emeans hierarchy"
+        );
+        let mut off = 8;
+        let mut take = |what: &str| -> Result<&[u8]> {
+            ensure!(b.len() - off >= 8, "truncated {what}");
+            let n = usize::try_from(u64::from_le_bytes(b[off..off + 8].try_into().unwrap()))
+                .ok()
+                .filter(|&n| n <= b.len() - off - 8)
+                .with_context(|| format!("truncated {what}"))?;
+            let part = &b[off + 8..off + 8 + n];
+            off += 8 + n;
+            Ok(part)
+        };
+        let mf: Manifest = serde_json::from_slice(take("manifest")?)?;
+        let h = Self::assemble(mf, backend, |g, assigner| {
+            let what = match g {
+                None => "level-1 model".to_string(),
+                Some(g) => format!("group {g} model"),
+            };
+            Emeans::from_bytes_with(take(&what)?, assigner).with_context(|| what)
+        })?;
+        ensure!(
+            off == b.len(),
+            "{} bytes after the last model",
+            b.len() - off
+        );
+        Ok(h)
+    }
+
+    fn manifest(&self) -> Manifest {
+        Manifest {
             version: MANIFEST_VERSION,
             d: self.d,
             config: self.config.clone(),
@@ -899,23 +971,7 @@ impl Hierarchy {
                 .collect(),
             diagnostics: self.diagnostics.clone(),
             state: self.state.clone(),
-        };
-        fs::write(
-            tmp.join("hierarchy.json"),
-            serde_json::to_vec_pretty(&manifest)?,
-        )?;
-        let old = dir.with_extension("old");
-        if old.exists() {
-            fs::remove_dir_all(&old)?;
         }
-        if dir.exists() {
-            fs::rename(dir, &old)?;
-        }
-        fs::rename(&tmp, dir)?;
-        if old.exists() {
-            fs::remove_dir_all(&old)?;
-        }
-        Ok(())
     }
 
     /// Read a hierarchy written by [`Hierarchy::save`].
@@ -924,11 +980,24 @@ impl Hierarchy {
         let b = fs::read(dir.join("hierarchy.json"))
             .with_context(|| format!("read {}/hierarchy.json", dir.display()))?;
         let mf: Manifest = serde_json::from_slice(&b)?;
+        Self::assemble(mf, backend, |g, assigner| match g {
+            None => Emeans::load_with(dir.join("level1.emeans"), assigner),
+            Some(g) => Emeans::load_with(dir.join(format!("group-{g}.emeans")), assigner),
+        })
+    }
+
+    /// Build a hierarchy from its manifest; `model(None)` reads the level-1
+    /// model, `model(Some(g))` group `g`'s (called in that order).
+    fn assemble(
+        mf: Manifest,
+        backend: Backend,
+        mut model: impl FnMut(Option<usize>, Box<dyn crate::Assigner>) -> Result<Emeans>,
+    ) -> Result<Hierarchy> {
         if mf.version != MANIFEST_VERSION {
             bail!("unsupported hierarchy version {}", mf.version);
         }
         let shared = SharedAssigner::new(make_assigner(backend)?);
-        let level1 = Emeans::load_with(dir.join("level1.emeans"), Box::new(shared.clone()))?;
+        let level1 = model(None, Box::new(shared.clone()))?;
         ensure!(
             level1.config().d == mf.d,
             "level-1 model d differs from the manifest"
@@ -940,10 +1009,7 @@ impl Hierarchy {
         let mut groups = Vec::with_capacity(mf.groups.len());
         for (g, gf) in mf.groups.into_iter().enumerate() {
             let model = if gf.has_model {
-                let m = Emeans::load_with(
-                    dir.join(format!("group-{g}.emeans")),
-                    Box::new(shared.clone()),
-                )?;
+                let m = model(Some(g), Box::new(shared.clone()))?;
                 ensure!(
                     m.config().k == gf.ids.len() && m.config().d == mf.d,
                     "group {g}: model and ids disagree"
@@ -981,6 +1047,7 @@ impl Hierarchy {
 }
 
 const MANIFEST_VERSION: u32 = 1;
+const BLOB_MAGIC: &[u8; 8] = b"EMHIER\0\x01";
 
 #[derive(Serialize, Deserialize)]
 struct GroupFile {

@@ -70,6 +70,21 @@ impl Emeans {
     /// Write the trained model (centroids, EMA state, recipe, config) to `path`.
     /// Writes to a temporary file first, then renames it over `path`.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
+        let buf = self.to_bytes()?;
+        let path = path.as_ref();
+        let tmp = path.with_extension("tmp");
+        {
+            let mut f =
+                fs::File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
+            f.write_all(&buf)?;
+            f.sync_all()?;
+        }
+        fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
+    /// The model file's bytes (the layout above), for a store without a file system.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let s = self.snapshot()?;
         let (k, d) = (s.config.k, s.config.d);
         let has_ema = !s.usage.is_empty();
@@ -96,16 +111,7 @@ impl Emeans {
             put_f32(&mut buf, &s.positions);
             put_f32(&mut buf, &s.usage);
         }
-        let path = path.as_ref();
-        let tmp = path.with_extension("tmp");
-        {
-            let mut f =
-                fs::File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
-            f.write_all(&buf)?;
-            f.sync_all()?;
-        }
-        fs::rename(&tmp, path)?;
-        Ok(())
+        Ok(buf)
     }
 
     /// Read a model written by `save`, with the fastest CPU assigner.
@@ -116,13 +122,16 @@ impl Emeans {
     pub fn load_with(path: impl AsRef<Path>, assigner: Box<dyn Assigner>) -> Result<Emeans> {
         let path = path.as_ref();
         let b = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-        ensure!(
-            b.len() >= 16 && &b[..8] == MAGIC,
-            "{} is not an emeans model",
-            path.display()
-        );
-        let h = u64::from_le_bytes(b[8..16].try_into().unwrap()) as usize;
-        ensure!(b.len() >= 16 + h, "truncated header");
+        Self::from_bytes_with(&b, assigner).with_context(|| format!("load {}", path.display()))
+    }
+
+    /// Read a model from the bytes of [`Emeans::to_bytes`] (or a model file).
+    pub fn from_bytes_with(b: &[u8], assigner: Box<dyn Assigner>) -> Result<Emeans> {
+        ensure!(b.len() >= 16 && &b[..8] == MAGIC, "not an emeans model");
+        let h = usize::try_from(u64::from_le_bytes(b[8..16].try_into().unwrap()))
+            .ok()
+            .filter(|&h| h <= b.len() - 16)
+            .context("truncated header")?;
         let header: Header = serde_json::from_slice(&b[16..16 + h])?;
         if header.version != VERSION {
             bail!("unsupported model version {}", header.version);
@@ -132,11 +141,17 @@ impl Emeans {
             header.config.k == k && header.config.d == d,
             "header k/d disagree with config"
         );
-        let kd = k * d;
-        let want = 16
-            + h
-            + if header.has_centroids { kd * 4 } else { 0 }
-            + if header.has_ema { (kd + k) * 4 } else { 0 };
+        // Checked: on 32-bit targets (wasm) a corrupt header must not wrap around.
+        let size = |n: usize| n.checked_mul(4).context("model too large");
+        let kd = k.checked_mul(d).context("model too large")?;
+        let mut want = 16 + h;
+        if header.has_centroids {
+            want = want.checked_add(size(kd)?).context("model too large")?;
+        }
+        if header.has_ema {
+            let ema = size(kd.checked_add(k).context("model too large")?)?;
+            want = want.checked_add(ema).context("model too large")?;
+        }
         ensure!(
             b.len() == want,
             "model file has {} bytes, expected {}",

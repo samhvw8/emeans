@@ -26,7 +26,7 @@
 //!
 //! `.okf/design/autok-incremental-dedup.md` has the comparisons behind these defaults.
 
-use std::time::Instant;
+use emeans_core::exec::Instant;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
