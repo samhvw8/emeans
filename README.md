@@ -12,9 +12,9 @@ WebAssembly.
 - **Same results on every backend.** With the same seed, the default CPU kernel, Metal and exact
   CUDA training ended at the same final objective in every benchmark run
   ([Metal](.okf/results/metal-kernels.md#exactness), [CUDA](.okf/results/cuda-kernels.md#exactness)).
-- **Faster on the same machine.** 200,000 x 768 rows, k = 1024, exact FP32 on an RTX 3060:
-  **0.16 s**, against 0.31 s for faiss Triton FP32
-  ([results](.okf/results/cuda-kernels.md)).
+- **1.5x to 2.6x faster than faiss** on the same machine, and it runs on Apple GPUs where faiss
+  cannot. 200,000 x 768 rows, k = 1024, exact FP32 on an RTX 3060: **0.16 s**, against 0.31 s for
+  faiss Triton FP32 ([benchmarks](#benchmarks)).
 
 It also adds what clustering embeddings needs in practice: automatic k in two levels,
 incremental updates with stable cluster ids, near-duplicate groups and exact kNN.
@@ -308,9 +308,10 @@ Rust crate: the binding tests check it, and the benchmark driver fails otherwise
 
 ## Benchmarks
 
-Baseline: faiss `contrib/e_means`, its fastest implementation on each machine (NumPy, torch or
-Triton). Synthetic data, d = 768, `train` time in seconds, **lower is better**. Median of 3 to 5
-seeds, faiss and emeans run interleaved on the same machine.
+emeans trains 1.5x to 2.6x faster than faiss on every machine measured, and runs on the M1 Pro GPU
+where faiss cannot. Baseline: faiss `contrib/e_means` on its fastest implementation per machine
+(NumPy, torch or Triton). Setup: synthetic data, d = 768, median of 3 to 5 seeds, faiss and emeans
+interleaved on the same machine. **`train` time in seconds, lower is better.**
 
 | 200,000 rows, k = 1024 | Baseline: faiss | emeans | emeans is faster by | Source |
 |---|---|---|---|---|
@@ -329,14 +330,19 @@ old and new builds. Treat it as a range, not a ratio.
 | RTX 3060, exact FP32 | 1.38 s (Triton FP32) | **0.62 s** | **2.2x** | [CUDA](.okf/results/cuda-kernels.md) |
 | RTX 3060, BF16 | 0.60 s (Triton BF16) | **0.39 s** | **1.5x** | [CUDA](.okf/results/cuda-kernels.md) |
 
-What made it faster than the baseline: kernels that find the nearest centroid inside the matrix
-multiply instead of writing the full score matrix, a training loop that keeps data and centroids on
-the GPU, and on CUDA an FP16 tensor-core screen with an exact FP32 re-check (same labels as plain
-FP32). Quality does not change: the objective stays within 0.43% of faiss
+Where the lead comes from:
+
+- **Fused kernels:** they find each row's nearest centroid inside the matrix multiply and never
+  write the full score matrix.
+- **Device-resident training:** data, centroids and statistics stay on the GPU between batches.
+- **Exact FP32 with tensor cores on CUDA:** an FP16 tensor-core screen picks candidates, then an exact FP32
+  re-check gives the same labels as plain FP32.
+
+**Same quality:** the objective stays within 0.43% of faiss
 ([how it differs](#how-it-differs-from-faiss)).
 
-Through the bindings (200,000 x 768, Linux box): `train` from Python, Node.js and Go took -9% to
-+6% of the time of native Rust ([results](.okf/results/bindings-bench.md)).
+Through the bindings (200,000 x 768, Linux box): `train` from Python, Node.js and Go ran within
+-9% to +6% of native Rust's time ([results](.okf/results/bindings-bench.md)).
 WebAssembly with the default `gemm` kernel took 2.8 to 3.4 times as long as native `cpu-fused` on
 one thread of the Xeon ([results](.okf/results/wasm-bench.md#reading)).
 
