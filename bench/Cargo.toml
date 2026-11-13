@@ -8,10 +8,18 @@ publish = false
 
 [features]
 default = []
-cuda = ["emeans/cuda", "candle-core?/cuda"]
+# The emeans CUDA engine only: cudarc loads libcuda/libnvrtc at run time, so a
+# CPU run never maps the CUDA libraries.
+cuda = ["emeans/cuda"]
 # candle-based baselines: CPU candle GEMM, Metal and CUDA unfused matmul + argmax.
 # Off by default, so `cargo test --workspace` never builds candle.
 baselines = ["dep:candle-core"]
+# The candle CUDA baseline (`cuda-unfused`). candle-core's `cuda` forces cudarc
+# `dynamic-linking`: the binary maps libcudart, libcuda, libnvrtc, libcurand,
+# libcublas and libcublasLt at start, and multi-threaded CPU training in that
+# process is about 10% slower on the 2x Xeon box. Do not time CPU backends with
+# a binary built with this feature (`.okf/recipes/adding-an-emeans-backend.md`, "How to use it").
+cuda-baselines = ["cuda", "baselines", "candle-core/cuda"]
 
 [dependencies]
 emeans.workspace = true

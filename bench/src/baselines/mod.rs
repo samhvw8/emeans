@@ -1,6 +1,6 @@
 //! candle-based baselines (feature `baselines`).
 
-#[cfg(feature = "cuda")]
+#[cfg(feature = "cuda-baselines")]
 pub mod cuda;
 #[cfg(target_os = "macos")]
 pub mod metal;
@@ -17,7 +17,7 @@ pub fn backend(name: &str) -> Option<Backend> {
         "cpu-candle-gemm" => || Ok(Box::new(CandleGemm::default())),
         #[cfg(target_os = "macos")]
         "metal-unfused" => || Ok(Box::new(metal::MetalUnfused::new()?)),
-        #[cfg(feature = "cuda")]
+        #[cfg(feature = "cuda-baselines")]
         "cuda-unfused" => || Ok(Box::new(cuda::CudaAssigner::new()?)),
         _ => return None,
     };

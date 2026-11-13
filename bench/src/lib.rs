@@ -6,7 +6,7 @@
 //! | any name `emeans::Backend` parses | that backend | — |
 //! | `cpu-candle-gemm` | candle CPU matmul per row block, then a rayon argmax | `baselines` |
 //! | `metal-unfused` | candle Metal `matmul` + `argmax` | `baselines`, macOS |
-//! | `cuda-unfused` | candle CUDA `matmul` + `argmax` | `baselines`, `cuda` |
+//! | `cuda-unfused` | candle CUDA `matmul` + `argmax` | `cuda-baselines` (slows CPU backends in the same binary) |
 //!
 //! The baselines are [`emeans::Backend::Custom`] backends with no engine, so
 //! training with them runs the host loop.
@@ -23,7 +23,10 @@ pub fn backend(name: &str) -> Result<Backend> {
     if let Some(b) = baselines::backend(name) {
         return Ok(b);
     }
-    if matches!(name, "cpu-candle-gemm" | "metal-unfused" | "cuda-unfused") {
+    if name == "cuda-unfused" {
+        anyhow::bail!("{name:?} is a candle baseline: build with --features cuda-baselines");
+    }
+    if matches!(name, "cpu-candle-gemm" | "metal-unfused") {
         anyhow::bail!("{name:?} is a candle baseline: build with --features baselines");
     }
     name.parse()

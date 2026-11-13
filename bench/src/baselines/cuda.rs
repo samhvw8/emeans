@@ -1,4 +1,4 @@
-//! CUDA baseline (features `baselines` + `cuda`): candle CUDA matmul, then a
+//! CUDA baseline (feature `cuda-baselines`): candle CUDA matmul, then a
 //! candle argmax/argmin.
 //!
 //! The same unfused path as the Metal baseline, on candle's CUDA device 0:
