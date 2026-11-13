@@ -7,7 +7,7 @@ tags: [architecture, crates, build-time, reuse, decision, bindings]
 status: draft
 generated:
   by: claude-code/claude-opus-5-5
-  at: '2026-11-12T22:00:00Z'
+  at: '2026-11-13T08:00:00Z'
 sources:
   - id: workspace
     resource: Cargo.toml
@@ -75,15 +75,15 @@ surprise. Cost of the choice: editing a backend rebuilds `emeans-cluster` (and t
 `emeans-cluster` never rebuilds a backend. An outside backend does not need a variant: it uses
 `Backend::Custom`.
 
-# Facade API for language bindings (planned)
+# Facade API for language bindings
 
-Bindings are planned for Python (PyO3 + maturin; inputs through the buffer protocol, `PyBuffer<f32>`,
+Built 2026-11-13 as planned, see [language bindings](/design/bindings.md). The plan: Python (PyO3 + maturin; inputs through the buffer protocol, `PyBuffer<f32>`,
 so NumPy is not a dependency), Node.js (napi-rs, `Float32Array`) and Go (a C ABI with a cbindgen
 header, wrapped by cgo). The facade is shaped for that: plain row-major `f32` slices in, plain
 structs and vectors out, no generics in the public API, over a small surface: `train`, `assign`,
 `auto_cluster`, `dedup`, and the incremental model (`add`, `save`, `load`). Prebuilt packages first
-for macOS arm64 (CPU + Metal) and Linux x86-64 (CPU); CUDA builds from source. Binding crate
-versions are to be checked when that work starts.
+for macOS arm64 (CPU + Metal) and Linux x86-64 (CPU); CUDA builds from source. No prebuilt
+package exists yet.
 
 # Checks
 

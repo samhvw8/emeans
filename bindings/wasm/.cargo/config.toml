@@ -1,0 +1,5 @@
+# SIMD128 is in every current browser and Node.js; it speeds up the gemm crate's
+# kernels (kNN, dedup, metrics) and leaves each float operation's result unchanged.
+# mise.toml sets the same flags plus a home-path remap (CARGO_TARGET_WASM32_..._RUSTFLAGS).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

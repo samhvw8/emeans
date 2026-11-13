@@ -14,3 +14,6 @@ __pycache__/
 
 # Synthetic benchmark data (regenerate with bench/py/gen_data.py)
 /bench/data/
+
+# C library tree from `mise run c:dist`
+/dist/

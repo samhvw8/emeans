@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emeans benchmark</title>
+<style>body { font: 14px/1.5 system-ui, sans-serif; margin: 16px; } pre { white-space: pre-wrap; }</style>
+</head>
+<body>
+<p>One training run: <code>bench.html?n=16000&amp;d=768&amp;k=256&amp;kernel=gemm&amp;seed=1234</code>.
+The result appears below and in <code>window.__emeansResult</code>.</p>
+<pre id="out">running…</pre>
+<script type="module">
+import init, { blobs, train } from "../pkg/emeans.js";
+
+const q = new URLSearchParams(location.search);
+const [n, d, k, seed] = ["n", "d", "k", "seed"].map((key, i) => Number(q.get(key) ?? [16000, 768, 256, 1234][i]));
+const kernel = q.get("kernel") ?? "gemm";
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+let result;
+try {
+  const wasm = await init();
+  await new Promise((r) => setTimeout(r, 0));
+  const x = blobs(n, d, 512, seed);
+  const t = performance.now();
+  const m = train(x, d, k, { kernel, seed, captureAssignments: false });
+  const trainMs = performance.now() - t;
+  const c = m.centroids();
+  result = {
+    n, d, k, kernel: m.kernel, runtime: navigator.userAgent.match(/(Headless)?Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent,
+    train_ms: trainMs,
+    centroids_sha256: hex(await crypto.subtle.digest("SHA-256", c)),
+    wasm_memory_bytes: wasm.memory.buffer.byteLength,
+    epochs: m.stats().length,
+  };
+  m.free();
+} catch (err) {
+  result = { error: String(err) };
+}
+document.getElementById("out").textContent = JSON.stringify(result, null, 2);
+window.__emeansResult = result;
+</script>
+</body>
+</html>

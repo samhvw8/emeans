@@ -6,8 +6,12 @@ members = [
   "crates/emeans-cuda",
   "crates/emeans-cluster",
   "crates/emeans",
+  "crates/emeans-ffi",
+  "bindings/common",
   "bench",
 ]
+# Language packages with their own workspace and lock file (built by maturin / napi).
+exclude = ["bindings/python", "bindings/node"]
 
 [workspace.package]
 version = "0.1.0"

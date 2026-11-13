@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "emeans"
+description = "e-means clustering (mini-batch k-means with scaling laws) on CPU, Metal and CUDA: automatic k, incremental updates, near-duplicate groups"
+requires-python = ">=3.11"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Scientific/Engineering",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+numpy = ["numpy"]
+
+[project.urls]
+Repository = "https://github.com/samhvw8/emeans"
+
+[tool.maturin]
+python-source = "python"
+module-name = "emeans._emeans"
+# Bindings for the stable ABI from 3.11 on: one wheel per platform.
+features = ["pyo3/abi3-py311"]

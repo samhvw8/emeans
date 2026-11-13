@@ -67,6 +67,23 @@ let nb = emeans::knn_self(&x, d, 10, Backend::cpu())?; // ids and similarities, 
 
 Read `crates/emeans/src/lib.rs` and the module docs for the full API.
 
+## Bindings
+
+The same API from other languages, in `bindings/` (built from source; nothing is on PyPI or npm yet):
+
+| Language | Path | Built with | Data in / out |
+|---|---|---|---|
+| Python | [`bindings/python`](bindings/python) | PyO3, maturin (abi3, CPython 3.11+) | any float32 buffer (NumPy, `array`, `memoryview`, `bytes`), no copy / read-only buffers, `.numpy()` |
+| Node.js | [`bindings/node`](bindings/node) | napi-rs 3, TypeScript types | `Float32Array`, async / typed arrays |
+| Go | [`bindings/go`](bindings/go) | cgo over the C ABI in [`crates/emeans-ffi`](crates/emeans-ffi) (cbindgen header) | `[]float32` / slices |
+| C / C++ (and any C FFI) | [`crates/emeans-ffi`](crates/emeans-ffi) | `mise run c:dist`: `libemeans.{a,dylib,so}`, `emeans.h`, pkg-config, CMake `find_package(emeans)` | `float*`, opaque handles; ABI version 1 |
+| Browser and Node.js (WebAssembly) | [`bindings/wasm`](bindings/wasm) | wasm-bindgen, TypeScript types; one thread, CPU only | `Float32Array` (copied) / typed arrays; `kernel: "fused"` is byte-identical to native `cpu-fused`, the default `gemm` is faster |
+
+Each binding has `train`, `assign`, `auto_cluster`, `dedup` and the incremental `Hierarchy`
+(`add`, `save`, `load`), takes configs as overrides of the library defaults (an unknown key is an
+error), and is tested to give byte-identical results to this crate (`mise run bind:test`,
+`mise run c:test`). A new language wraps the C API: see `.okf/recipes/adding-a-language-binding.md`.
+
 ## Backends
 
 | Name (`"…".parse::<Backend>()`) | Where | Notes |

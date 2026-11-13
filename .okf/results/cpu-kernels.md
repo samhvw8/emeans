@@ -21,6 +21,9 @@ sources:
   - id: mac-ab
     resource: bench/src/bin/cpu_probe.rs
     title: Mac probe (gather, sgemm, argmax, tiled and pipelined variants) and an interleaved old-vs-new A/B at 200k, 2026-11-12
+  - id: cuda-libs
+    resource: bench/Cargo.toml
+    title: The "split regression" hunt on the x86 box, 2026-11-13 - emeans-compare builds with and without candle's CUDA, LD_PRELOAD of the CUDA libraries, 1 vs 32 threads, interleaved, fresh process per run
   - id: parity
     resource: bench/py/compare.py
     title: bench/src/bin/parity.rs, 7 faiss parity cases, seeds 1-5, on Accelerate and cpu-fused
@@ -122,6 +125,39 @@ binaries under the same load (16-19), alternating per seed:[^mac-ab]
 On the calm Mac that is 1.28 s / 1.26 = ~1.0 s, in line with `ops_bench` (loop 1.03-1.12 s new vs
 1.24-1.51 s old, interleaved). A quiet-Mac rerun of the 9-cell sweep is still to do.
 
+# CUDA libraries in the process slow the CPU path
+
+A `cpu-fused` run looked 8-12% slower after the library split. It was not the split: the new
+`emeans-compare` was built with `--features cuda` and the candle baselines, the old one without CUDA.
+candle-core 0.11.1's `cuda` feature forces cudarc's `dynamic-linking`, so that binary maps libcudart,
+libcuda, libnvrtc, libcurand, libcublas and libcublasLt at start, and multi-threaded CPU training in
+the process is slower even though it never touches the GPU.[^cuda-libs] `emeans-cuda` alone uses
+cudarc's dynamic loading and maps nothing until a CUDA backend is built.
+
+Box, 200k x 1024, `cpu-fused`, `train_s`, medians of interleaved fresh-process runs:
+
+| Binary | Median | Range | Runs |
+|---|---|---|---|
+| Old code, no CUDA (`aabfef0`) | 1.78 s | 1.72-1.88 | 6 |
+| Old code, `cuda` (candle CUDA linked) | 1.87 s | 1.82-1.97 | 4 |
+| New code, `cuda` + baselines (candle CUDA linked) | 2.09 s | 1.79-2.18 | 6 |
+| New code, no CUDA | 1.81 s | 1.74-1.84 | 6 |
+| New code, no CUDA, the six libraries `LD_PRELOAD`ed | 2.03 s | 1.81-2.26 | 5 |
+| New code, `cuda` without candle CUDA (the fix) | 1.81 s | 1.70-2.04 | 6 |
+
+- One thread (16k rows): no difference (2.07 vs 2.10 s). At 32 threads on the global pool
+  (`RAYON_NUM_THREADS=32`) the gap stays (1.80 vs 1.94 s), so it is not the physical-core pool.
+- With the libraries loaded the run uses more user CPU (55-60 s vs 49-54 s); system time and page
+  faults barely change. NUMA interleave does not remove the gap. The exact cause in the hardware is
+  not known: `perf` is closed to users on the box.
+- Centroids are byte-identical in every run, CUDA included; the CUDA backend is equally fast in both
+  builds (0.162 s median).
+- Mac (no CUDA, so not affected): `cpu-accelerate` at 100k x 1024, `train_profile`, old (`aabfef0`)
+  vs new, 12 interleaved runs each: medians 596 ms vs 552 ms (busy Mac, ranges 514-905 and
+  503-785 ms); final objectives identical per seed in 12 of 12 pairs.
+- Fix: `emeans-bench`'s `cuda` no longer turns on candle's CUDA; the `cuda-unfused` baseline needs
+  `cuda-baselines`. The photo tool's `box_build.sh` builds `emeans-compare` with `cuda` only.
+
 # Exactness
 
 | Check | Result |
@@ -154,4 +190,5 @@ CPU matmul makes, ran 275-326 ms per 16k x 1024 batch on 32-64 threads against 2
 [^box-runs]: Interleaved whole-run sweep, 3 seeds, 2026-11-12; Rust rows rerun after the pool fix.
 [^mac-runs]: Interleaved whole-run sweep on the Mac, 3 seeds, load average recorded per run.
 [^mac-ab]: Interleaved runs of the old and new binaries (same CLI), 200k, seeds 1-5 (k 1024) and 1-9 (k 64, 256), Mac load 16-19.
+[^cuda-libs]: Box logs of the hunt: builds of `emeans-compare` with `--features cuda` (candle CUDA via `baselines`), with `--no-default-features --features cuda` and without CUDA; `ldd` shows which binaries map the CUDA libraries.
 [^parity]: `bench/data/results/` (gitignored), `uv run bench/py/compare.py <dir>`.

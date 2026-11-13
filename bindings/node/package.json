@@ -1,0 +1,38 @@
+{
+  "name": "emeans",
+  "version": "0.1.0",
+  "description": "e-means clustering (mini-batch k-means with scaling laws) on CPU, Metal and CUDA: automatic k, incremental updates, near-duplicate groups",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samhvw8/emeans",
+    "directory": "bindings/node"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "napi": {
+    "binaryName": "emeans",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "dtsHeaderFile": "types-header.d.ts"
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "3.10.12"
+  }
+}

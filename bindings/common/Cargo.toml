@@ -1,0 +1,19 @@
+[package]
+name = "emeans-bindings-common"
+description = "The plain API every emeans language binding wraps: JSON configs with defaults, backend names, plain results"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[features]
+default = []
+cuda = ["emeans/cuda"]
+
+[dependencies]
+emeans.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true

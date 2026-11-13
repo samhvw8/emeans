@@ -1,4 +1,10 @@
 [tools]
+"cargo:cbindgen" = "0.29.4"
+cmake = "4.4"
+go = "1.27"
+node = "26"
+"pipx:maturin" = "1.16.0"
+python = "3.15"
 rust = "1.99.1"
 # Python reference scripts in bench/py (uv run --script)
 uv = "latest"
@@ -19,3 +25,136 @@ run = "cargo test --workspace"
 [tasks."test:cuda"]
 description = "Run the tests with the CUDA backend (needs a CUDA driver and device)"
 run = "cargo test --workspace --features emeans/cuda,emeans-cluster/cuda"
+
+# ---- Language bindings (bindings/; see bindings/*/README.md) ----
+
+[tasks."bind:fixture"]
+description = "Write the cross-language fixture (Rust facade results) to target/bindings-fixture"
+run = "cargo run --release -q -p emeans-bindings-common --example write_fixture -- target/bindings-fixture"
+
+[tasks."bind:py:test"]
+description = "Build the Python binding into bindings/python/.venv and test it against the fixture"
+depends = ["bind:fixture"]
+dir = "bindings/python"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/py", VIRTUAL_ENV = "{{config_root}}/bindings/python/.venv", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "test -d .venv || uv venv -q --python \"$(mise which python)\" .venv",
+  "uv pip install -q numpy",
+  "maturin develop --release --uv",
+  "{{config_root}}/bindings/check-home-paths.sh python/emeans/_emeans.abi3.so",
+  "EMEANS_FIXTURE={{config_root}}/target/bindings-fixture .venv/bin/python -m unittest discover -s tests",
+]
+
+[tasks."bind:py:wheel"]
+description = "Build the Python wheel (abi3) into target/py/wheels, with home paths remapped, and check it"
+dir = "bindings/python"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/py", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "maturin build --release --out {{config_root}}/target/py/wheels",
+  "rm -rf {{config_root}}/target/py/wheel-check && mkdir -p {{config_root}}/target/py/wheel-check && cd {{config_root}}/target/py/wheel-check && unzip -q -o \"$(ls -t ../wheels/emeans-*.whl | head -1)\" && {{config_root}}/bindings/check-home-paths.sh emeans/_emeans.abi3.so",
+]
+
+[tasks."bind:node:test"]
+description = "Build the Node binding and test it against the fixture"
+depends = ["bind:fixture"]
+dir = "bindings/node"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/node", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "npm install --no-audit --no-fund",
+  "npm run build",
+  "{{config_root}}/bindings/check-home-paths.sh emeans.*.node",
+  "EMEANS_FIXTURE={{config_root}}/target/bindings-fixture npm test",
+]
+
+[tasks."bind:go:header"]
+description = "Regenerate the C header of emeans-ffi (cbindgen)"
+dir = "crates/emeans-ffi"
+run = "cbindgen --config cbindgen.toml --output include/emeans.h"
+
+[tasks."bind:go:lib"]
+description = "Build the static C-ABI library for this platform into bindings/go/lib/<GOOS>_<GOARCH>"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/ffi", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "cargo build --release -p emeans-ffi",
+  "mkdir -p bindings/go/lib/$(go env GOOS)_$(go env GOARCH)",
+  "cp target/ffi/release/libemeans_ffi.a bindings/go/lib/$(go env GOOS)_$(go env GOARCH)/",
+  "bindings/check-home-paths.sh bindings/go/lib/$(go env GOOS)_$(go env GOARCH)/libemeans_ffi.a",
+]
+
+[tasks."bind:go:test"]
+description = "Check the C header is current, build the library and test the Go binding against the fixture"
+depends = ["bind:fixture", "bind:go:lib"]
+dir = "bindings/go"
+run = [
+  "cd {{config_root}}/crates/emeans-ffi && cbindgen --config cbindgen.toml --verify --output include/emeans.h",
+  "go vet ./...",
+  "EMEANS_FIXTURE={{config_root}}/target/bindings-fixture go test -count=1 ./...",
+]
+
+[tasks."bind:test"]
+description = "Test every language binding (Python, Node, Go)"
+depends = ["bind:py:test", "bind:node:test", "bind:go:test"]
+
+[tasks."example:python"]
+description = "Build the Python binding and run its quickstart (args: a backend, e.g. metal)"
+dir = "bindings/python"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/py", VIRTUAL_ENV = "{{config_root}}/bindings/python/.venv", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "test -d .venv || uv venv -q --python \"$(mise which python)\" .venv",
+  "maturin develop --release --uv -q",
+  ".venv/bin/python examples/quickstart.py",
+]
+
+[tasks."example:node"]
+description = "Build the Node binding and run its quickstart (args: a backend, e.g. metal)"
+dir = "bindings/node"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/node", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "test -d node_modules || npm install --no-audit --no-fund",
+  "npm run build",
+  "node examples/quickstart.mjs",
+]
+
+[tasks."example:go"]
+description = "Build the C-ABI library and run the Go quickstart (args: a backend, e.g. metal)"
+depends = ["bind:go:lib"]
+dir = "bindings/go"
+run = "go run ./examples/quickstart"
+
+[tasks."bind:bench:build"]
+description = "Build the binding benchmark programs (Rust bench, Python and Node bindings, Go bench) into target/bench"
+env = { CARGO_TARGET_DIR = "{{config_root}}/target/bench", RUSTFLAGS = "--remap-path-prefix={{env.HOME}}=~", CARGO_PROFILE_RELEASE_DEBUG = "0", CARGO_PROFILE_RELEASE_STRIP = "debuginfo" }
+run = [
+  "cargo build --release -q -p emeans-bindings-common --example bench",
+  "cargo build --release -q -p emeans-ffi",
+  "mkdir -p bindings/go/lib/$(go env GOOS)_$(go env GOARCH) && cp target/bench/release/libemeans_ffi.a bindings/go/lib/$(go env GOOS)_$(go env GOARCH)/",
+  "cd bindings/go && go build -o {{config_root}}/target/bench/go-bench ./examples/bench",
+  "cd bindings/python && (test -d .venv || uv venv -q --python \"$(mise which python)\" .venv) && VIRTUAL_ENV=$PWD/.venv uv pip install -q numpy && VIRTUAL_ENV=$PWD/.venv maturin develop --release --uv -q",
+  "cd bindings/node && (test -d node_modules || npm install --no-audit --no-fund) && npm run build",
+]
+
+[tasks."bind:bench"]
+description = "Benchmark each binding against native Rust (args: --data FILE --d D [--ks ..] [--backends ..] --out DIR)"
+depends = ["bind:bench:build"]
+run = "python3 bindings/bench/run.py"
+
+# ---- C API (crates/emeans-ffi; see .okf/design/c-api.md) ----
+
+[tasks."c:dist"]
+description = "Build the C library into dist/: lib (static + shared), include/emeans.h, pkg-config and CMake files"
+run = "crates/emeans-ffi/dist.sh dist"
+
+[tasks."c:test"]
+description = "Build the C quickstart against dist/ with cc + pkg-config and with CMake (shared and static) and run all three"
+depends = ["c:dist"]
+env = { PKG_CONFIG_PATH = "{{config_root}}/dist/lib/pkgconfig" }
+run = [
+  "cd crates/emeans-ffi && cbindgen --config cbindgen.toml --verify --output include/emeans.h",
+  "bindings/check-home-paths.sh dist/lib/libemeans.a dist/lib/libemeans.$(test $(uname) = Darwin && echo dylib || echo so.1)",
+  "mkdir -p target/c-test && cc -std=c11 -Wall -Wextra -Werror -O2 examples/c/quickstart.c $(pkg-config --cflags --libs emeans) -lm -Wl,-rpath,{{config_root}}/dist/lib -o target/c-test/quickstart-pc",
+  "target/c-test/quickstart-pc",
+  "cmake -S examples/c -B target/c-test/cmake -DCMAKE_PREFIX_PATH={{config_root}}/dist -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS='-Wall -Wextra -Werror' > /dev/null",
+  "cmake --build target/c-test/cmake > /dev/null",
+  "target/c-test/cmake/quickstart > /dev/null && echo 'cmake shared: ok'",
+  "target/c-test/cmake/quickstart_static > /dev/null && echo 'cmake static: ok'",
+]

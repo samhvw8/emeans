@@ -6,7 +6,7 @@ tags: [getting-started, e-means, clustering, rust, metal, cuda]
 status: draft
 generated:
   by: claude-code/claude-opus-5-5
-  at: '2026-11-12T22:00:00Z'
+  at: '2026-11-13T08:00:00Z'
 ---
 
 # Overview
@@ -18,7 +18,7 @@ run with the same seed matches faiss draw for draw, and every backend gives the 
 the CPU for the same seed ([e-means algorithm](design/emeans-algorithm.md), [core](design/core.md)).
 
 Inputs are plain row-major `f32` slices (`n x d`), outputs plain structs; nothing in the public API
-is generic, so the planned Python, Node.js and Go bindings can wrap it as is.
+is generic, so the Python, Node.js and Go bindings ([bindings](/design/bindings.md)) wrap it as is.
 
 ```rust
 use emeans::{Backend, Config, Emeans, make_assigner};
@@ -40,6 +40,7 @@ let labels = model.assign(&x)?.labels;
 | `crates/emeans` | Facade over all of them; feature `cuda`, Metal by target | [crate layout](decisions/crate-layout.md) |
 | `bench/` (`emeans-bench`, not published) | Benchmark and parity binaries; candle baselines behind feature `baselines`; `bench/py/` Python reference scripts | [backend recipe](recipes/adding-an-emeans-backend.md) |
 | `reference/faiss_e_means` | Upstream faiss source, MIT, pinned commit; read-only | [e-means algorithm](design/emeans-algorithm.md) |
+| `bindings/wasm` (own Cargo workspace, not published) | The CPU backend on WebAssembly with a JavaScript/TypeScript API for the browser and Node.js; `mise run build`, `mise run test`, `mise run example:wasm` in that folder | [web version](design/web.md), [wasm benchmark](results/wasm-bench.md) |
 
 # Build and test
 
@@ -59,4 +60,5 @@ Ubuntu box with an RTX 3060 and 2x Xeon E5-2683 v4.
 - New to the code: [core](design/core.md), then [e-means algorithm](design/emeans-algorithm.md).
 - Adding a backend: [adding an e-means backend](recipes/adding-an-emeans-backend.md).
 - Why the crates are split this way: [crate layout](decisions/crate-layout.md).
+- Running it in a browser or Node.js: [web version](design/web.md).
 - What it buys over faiss: [improvements over faiss](results/improvements-over-faiss.md).

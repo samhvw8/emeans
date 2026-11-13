@@ -1,0 +1,31 @@
+[package]
+name = "emeans-node"
+description = "Node.js binding of emeans (napi-rs)"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samhvw8/emeans"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = []
+cuda = ["emeans-bindings-common/cuda"]
+
+[dependencies]
+emeans-bindings-common = { path = "../common" }
+napi = { version = "3.16.2", default-features = false, features = ["napi8", "serde-json"] }
+napi-derive = "3.7.1"
+anyhow = "1.0.104"
+serde_json = "1.0.154"
+
+[build-dependencies]
+napi-build = "2.6.0"
+
+[profile.release]
+debug = 1
+
+# Its own workspace: napi builds it alone, with its own lock file.
+[workspace]

@@ -1,0 +1,2 @@
+# Static libraries built by `mise run bind:go:lib` (one per GOOS_GOARCH).
+/lib/

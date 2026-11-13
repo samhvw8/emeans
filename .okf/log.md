@@ -1,6 +1,15 @@
 # Update Log
 
 ## 2026-11-13
+* **Update**: [language bindings](design/bindings.md): shipped binaries remap $HOME and drop debug info; `check-home-paths.sh` in the build tasks (before: 38-96 home paths per artifact, after: 0). [Bindings vs native Rust](results/bindings-bench.md): Linux box results.
+* **Creation**: [WebAssembly vs native](results/wasm-bench.md): wasm `gemm` (now the binding's default) takes 2.8-3.4x the time of native one-thread `fused` on the Xeon; wasm `fused` gives the same centroid bits as native at every shape, on x86-64 and aarch64, in Node and Chrome. **Update**: [web version](design/web.md): default kernel `gemm`, which wasm kernel matches which native kernel (golden tests on both hosts), home paths remapped out of the `.wasm`; [getting started](getting-started.md) points to `bindings/wasm`.
+* **Creation**: [bindings vs native Rust](results/bindings-bench.md): Mac results (CPU and Metal), byte-identical everywhere; the box run is pending.
+* **Update**: [language bindings](design/bindings.md): `train` no longer runs an extra assign pass; `objective` is now the last epoch's moving mean, the exact one is opt-in (`exact_objective`, `emeans_model_objective`).
+* **Creation**: [C API](design/c-api.md) and [adding a language binding](recipes/adding-a-language-binding.md): the C ABI became a public C API (ABI version 1, stability policy, model handle, bytes round trips, `c:dist` with pkg-config and CMake, C quickstart and `c:test`).
+* **Creation**: [web version](design/web.md): `bindings/wasm` (wasm-bindgen 0.2.130, own Cargo workspace) exports `train`, `Model`, `autoCluster`, `Hierarchy`, `dedup` to the browser and Node.js; Node tests show the same bits as native `cpu-fused` for training, assignment and the hierarchy; `emeans-core` gained `exec` (helper threads inline and a web clock on wasm) and `Emeans::to_bytes` / `from_bytes_with`, `emeans-cluster` `Hierarchy::to_bytes` / `from_bytes`; WebGPU backend researched, not built.
+* **Update**: [CPU kernels](results/cpu-kernels.md), [backend recipe](recipes/adding-an-emeans-backend.md): the 8-12% `cpu-fused` slowdown after the split came from candle's CUDA (linked CUDA libraries) in the benchmark binary, not from the split; `emeans-bench` `cuda` no longer enables candle's CUDA, the `cuda-unfused` baseline moved to the new `cuda-baselines` feature.
+* **Update**: [language bindings](design/bindings.md): Linux x86-64 test pass, quickstart examples (`example:*`), benchmark harness (`bind:bench`).
+* **Creation**: [language bindings](design/bindings.md): Python (PyO3), Node.js (napi-rs) and Go (cgo over the new `emeans-ffi` C ABI), all over `emeans-bindings-common`; byte-for-byte fixture tests against the facade.
 * **Update**: [crate layout](decisions/crate-layout.md): CUDA tests pass on an RTX 3060 with the split layout.
 
 ## 2026-11-12

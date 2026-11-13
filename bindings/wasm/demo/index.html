@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>emeans in the browser</title>
+<style>
+  :root { --bg: #fbfbf9; --fg: #1d1d1b; --muted: #6b6b66; --line: #ddddd6; --accent: #2557d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --fg: #ececea; --muted: #9a9a94; --line: #34342f; --accent: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+  label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); }
+  input, select { font: inherit; padding: 4px 6px; width: 110px; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px; }
+  button { font: inherit; padding: 6px 16px; border: 0; border-radius: 4px; background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  canvas { width: 100%; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 4px; display: block; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  td, th { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  td.n { text-align: right; }
+  #status { color: var(--muted); min-height: 1.5em; }
+  .err { color: #c0362c; }
+</style>
+</head>
+<body>
+<main>
+  <h1>emeans in the browser</h1>
+  <p class="lead">Mini-batch k-means (e-means) compiled to WebAssembly, on synthetic points. Nothing leaves this page.</p>
+  <form id="f">
+    <label>points <input id="n" type="number" value="50000" min="100" step="1000"></label>
+    <label>dimensions <input id="d" type="number" value="16" min="2" max="512"></label>
+    <label>true clusters <input id="c" type="number" value="12" min="1" max="200"></label>
+    <label>k <input id="k" type="number" value="12" min="1" max="2000"></label>
+    <label>epochs <input id="e" type="number" value="5" min="0.5" step="0.5"></label>
+    <label>seed <input id="s" type="number" value="1234"></label>
+    <label>kernel <select id="kernel">
+      <option value="gemm">gemm (fast, default)</option>
+      <option value="fused">fused (native bits)</option>
+      <option value="blocked">blocked</option>
+    </select></label>
+    <button id="go" type="submit" disabled>Cluster</button>
+  </form>
+  <div id="status">Loading the wasm module…</div>
+  <div class="grid">
+    <canvas id="plot" width="600" height="600" aria-label="First two dimensions, colored by cluster"></canvas>
+    <table id="times"><tbody></tbody></table>
+  </div>
+</main>
+<script type="module">
+import init, * as em from "../pkg/emeans.js";
+
+const $ = (id) => document.getElementById(id);
+const status = (t, err = false) => { $("status").textContent = t; $("status").className = err ? "err" : ""; };
+
+/** n x d Gaussian blobs around c random centers (deterministic for a seed). */
+function blobs(n, d, c, seed) {
+  let s = seed >>> 0;
+  const u = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) + 1) / 2 ** 32;
+  const g = () => Math.sqrt(-2 * Math.log(u())) * Math.cos(2 * Math.PI * u());
+  const centers = Float32Array.from({ length: c * d }, () => g() * 5);
+  const x = new Float32Array(n * d);
+  for (let i = 0; i < n; i++) {
+    const j = Math.floor(u() * c) % c;
+    for (let t = 0; t < d; t++) x[i * d + t] = centers[j * d + t] + g();
+  }
+  return x;
+}
+
+function draw(x, d, labels, k, centroids) {
+  const cv = $("plot"), ctx = cv.getContext("2d");
+  const n = labels.length;
+  let [x0, x1, y0, y1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (let i = 0; i < n; i++) {
+    x0 = Math.min(x0, x[i * d]); x1 = Math.max(x1, x[i * d]);
+    y0 = Math.min(y0, x[i * d + 1]); y1 = Math.max(y1, x[i * d + 1]);
+  }
+  const sx = (v) => ((v - x0) / (x1 - x0 || 1)) * (cv.width - 20) + 10;
+  const sy = (v) => cv.height - 10 - ((v - y0) / (y1 - y0 || 1)) * (cv.height - 20);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const step = Math.max(1, Math.floor(n / 20000));
+  for (let i = 0; i < n; i += step) {
+    ctx.fillStyle = `hsl(${(labels[i] * 137.508) % 360} 65% 50% / .55)`;
+    ctx.fillRect(sx(x[i * d]), sy(x[i * d + 1]), 2, 2);
+  }
+  ctx.strokeStyle = getComputedStyle(document.body).color;
+  for (let j = 0; j < k; j++) {
+    ctx.beginPath();
+    ctx.arc(sx(centroids[j * d]), sy(centroids[j * d + 1]), 5, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+}
+
+function table(rows) {
+  const tb = $("times").tBodies[0];
+  tb.replaceChildren(...rows.map(([a, b]) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th"); th.textContent = a;
+    const td = document.createElement("td"); td.className = "n"; td.textContent = b;
+    tr.append(th, td);
+    return tr;
+  }));
+}
+
+async function run(ev) {
+  ev?.preventDefault();
+  $("go").disabled = true;
+  status("Clustering…");
+  await new Promise((r) => setTimeout(r, 20)); // let the status paint
+  const [n, d, c, k, e, s] = ["n", "d", "c", "k", "e", "s"].map((id) => Number($(id).value));
+  try {
+    let t = performance.now();
+    const x = blobs(n, d, c, s);
+    const genMs = performance.now() - t;
+    t = performance.now();
+    const kernel = $("kernel").value;
+    const m = em.train(x, d, k, { nepochs: e, seed: s, kernel });
+    const trainMs = performance.now() - t;
+    t = performance.now();
+    const a = m.assign(x);
+    const assignMs = performance.now() - t;
+    const stats = m.stats();
+    draw(x, d, a.labels, k, m.centroids());
+    const mean = a.scores.reduce((p, v) => p + v, 0) / n;
+    table([
+      ["points × dims", `${n.toLocaleString()} × ${d}`],
+      ["data (JS)", `${genMs.toFixed(0)} ms`],
+      ["train (wasm)", `${trainMs.toFixed(0)} ms`],
+      ["assign all (wasm)", `${assignMs.toFixed(0)} ms`],
+      ["epochs run", String(stats.length)],
+      ["mean squared distance", mean.toFixed(3)],
+      ["kernel", m.kernel],
+      ["emeans", em.version()],
+    ]);
+    window.__emeansResult = { n, d, k, kernel: m.kernel, trainMs, assignMs, epochs: stats.length, mean };
+    m.free();
+    status("Done. The plot shows the first two dimensions.");
+  } catch (err) {
+    status(String(err), true);
+    window.__emeansResult = { error: String(err) };
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+// Form values from the URL (?n=&d=&c=&k=&e=&s=&kernel=), for links and the headless check.
+const params = new URLSearchParams(location.search);
+for (const id of ["n", "d", "c", "k", "e", "s", "kernel"]) if (params.has(id)) $(id).value = params.get(id);
+
+try {
+  await init();
+  $("go").disabled = false;
+  $("f").addEventListener("submit", run);
+  status("Ready.");
+  if (params.has("auto")) await run();
+} catch (err) {
+  status(`Could not load the wasm module: ${err}. Serve this folder over HTTP (file:// cannot load .wasm).`, true);
+}
+</script>
+</body>
+</html>

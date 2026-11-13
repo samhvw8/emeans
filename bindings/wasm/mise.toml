@@ -1,0 +1,55 @@
+# Tools of the WebAssembly build (bindings/wasm only). Rust comes from the repo's
+# mise.toml; the wasm32-unknown-unknown target is added with rustup.
+[tools]
+# The CLI version must equal the `wasm-bindgen` crate version in Cargo.toml.
+"github:wasm-bindgen/wasm-bindgen" = "0.2.130"
+# wasm-opt (size and speed pass after wasm-bindgen).
+"github:WebAssembly/binaryen" = "version_133"
+node = "26"
+
+[env]
+# Builds of this crate stay in bindings/wasm/target (its own workspace).
+CARGO_TARGET_DIR = "{{config_root}}/target"
+# The wasm target's flags: simd128 (as in .cargo/config.toml, which this replaces under
+# mise) and $HOME -> ~ in panic locations, so the .wasm holds no absolute home path and
+# builds on different machines give the same bytes.
+CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS = "-C target-feature=+simd128 --remap-path-prefix={{env.HOME}}=~"
+
+[tasks.build]
+description = "Build pkg/: release wasm, JS glue and .d.ts (wasm-bindgen --target web), wasm-opt"
+run = [
+  "cargo build --release --target wasm32-unknown-unknown",
+  "wasm-bindgen --target web --out-dir pkg --out-name emeans target/wasm32-unknown-unknown/release/emeans_wasm.wasm",
+  # Features rustc enables for wasm32-unknown-unknown, plus simd128 (.cargo/config.toml).
+  "wasm-opt -O3 --enable-simd --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue pkg/emeans_bg.wasm -o pkg/emeans_bg.wasm",
+  "node scripts/size.mjs",
+]
+
+[tasks.golden]
+description = "Native reference outputs on synthetic data (out/golden)"
+run = "cargo run --release --example golden -- out/golden"
+
+[tasks.test]
+description = "Rust unit tests (native), then the Node tests: bit equality with native, API, size"
+depends = ["build", "golden"]
+run = [
+  "cargo test",
+  "node --test tests/",
+]
+
+[tasks.demo]
+description = "Serve the demo page at http://localhost:8765/demo/"
+run = "node scripts/serve.mjs 8765"
+
+[tasks."demo:check"]
+description = "Run the demo in headless Chrome; print its timings, save out/demo.png"
+run = "node scripts/chrome.mjs 'demo/?auto=1&n=50000&d=16&k=12' --shot out/demo.png"
+
+[tasks."example:wasm"]
+description = "Node quickstart: synthetic data, train, assign, autoCluster, add, toBytes/fromBytes"
+depends = ["build"]
+run = "node examples/quickstart.mjs"
+
+[tasks.bench]
+description = "Wasm vs native benchmark (d = 768): node scripts/bench-run.mjs --help"
+run = "node scripts/bench-run.mjs"

@@ -1,0 +1,12 @@
+{
+  "name": "emeans-wasm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "e-means for the browser and Node.js (WebAssembly). Not published; build with `mise run build`.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "main": "pkg/emeans.js",
+  "types": "pkg/emeans.d.ts",
+  "files": ["pkg/"],
+  "engines": { "node": ">=20" }
+}

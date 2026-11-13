@@ -1,0 +1,32 @@
+# The WebAssembly build of emeans: its own workspace (not a member of the
+# repo's), so `cargo test --workspace` at the root never builds it.
+[package]
+name = "emeans-wasm"
+description = "e-means for the browser and Node.js: WebAssembly build with a JavaScript/TypeScript API"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/samhvw8/emeans"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+emeans = { path = "../../crates/emeans" }
+anyhow = "1.0.104"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+# Must equal the wasm-bindgen CLI version in mise.toml.
+wasm-bindgen = "=0.2.130"
+js-sys = "0.3.107"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+debug = false
+
+[workspace]

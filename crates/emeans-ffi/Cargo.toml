@@ -1,0 +1,23 @@
+[package]
+name = "emeans-ffi"
+description = "C ABI of emeans (opaque handles, error codes, JSON configs); the Go binding links it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+name = "emeans_ffi"
+# staticlib for Go (cgo) and C; cdylib for dynamic loading; rlib for the tests.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+default = []
+cuda = ["emeans-bindings-common/cuda"]
+
+[dependencies]
+emeans-bindings-common = { path = "../../bindings/common" }
+anyhow.workspace = true
+serde_json.workspace = true

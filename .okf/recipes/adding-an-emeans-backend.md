@@ -44,6 +44,10 @@ CUDA engine on an RTX 3060, 12 Nov 2026.[^tensorfold]
 3. Time single ops with `cargo run --release -p emeans-bench --bin ops_bench`; claim a training speed
    only from whole training runs (5 seeds, interleaved with the CPU backend, a fresh process per run,
    the data upload outside the timer) on the same machine. `train_profile` times whole runs in one process.
+   Time CPU backends with a binary that does not link candle's CUDA (no `cuda-baselines`, no candle
+   `cuda` from another crate): it maps six CUDA libraries at start and makes multi-threaded CPU
+   training ~10% slower on the x86 box. Compare old and new only between binaries with the same
+   features and the same `ldd` list.[^cpu-kernels]
 4. When a step proves out, add it here with its result. When one loses, add it to "Don't bother".
 
 # What a backend writes
@@ -152,6 +156,7 @@ From the second CUDA pass on the RTX 3060 (the first pass is steps 1, 2, 4-7 abo
 | Mac: `cpu-fused` instead of Accelerate | top-1 6-32 ms (k 64), 48-86 ms (k 1024) vs 3.3-4.5 and 16-17 ms[^cpu-kernels] | AMX beats the NEON cores; Accelerate stays the Mac default |
 | x86 box: 64 threads (hyperthreads) for `cpu-fused` | top-1 equal (24-25 ms), loop slower (1.88-1.91 vs 1.68-1.72 s)[^cpu-kernels] | FMA-bound kernel; extra threads only cost wake-ups. The scalar `cpu-blocked` is the opposite: it keeps the global pool |
 | x86 box: `cpu-fused` tile sweep (mc 48-192, nc 64-256, kc 128-768), NUMA interleave | 21.8-30.9 ms, noise ~3 ms; interleave 24.0-26.2 ms[^cpu-kernels] | The kernel holds 65% of the FMA peak at every thread count; the per-core loss is the AVX clock (3.0 to 1.7 GHz) |
+| Comparing CPU timings of a CPU-only build with a build that links candle's CUDA | Box 200k x 1024 `cpu-fused`: 1.78 s (old, no CUDA) vs 2.09 s (new, `cuda` + candle baselines) looked like a regression from the crate split; the new code without candle CUDA ran 1.81 s[^cpu-kernels] | candle forces cudarc `dynamic-linking`; loading the CUDA libraries alone (`LD_PRELOAD`) costs the same 8-12%, at 32 threads but not at 1. Keep candle's CUDA out of CPU benchmark binaries (`cuda-baselines` is separate) |
 | x86 box: scatter columns split by each cluster's row count | 2.7-3.1 ms either way[^cpu-kernels] | Not imbalance: the scattered 3 KB row reads (~20 GB/s) bound it |
 
 [^tensorfold]: Same format as TensorFold's family recipe and the encoder library's family recipe.
