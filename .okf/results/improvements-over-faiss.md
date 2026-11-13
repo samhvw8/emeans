@@ -102,6 +102,6 @@ training rows under 1% flagged, rows of an unseen group all flagged).
 - Auto-k, incremental updates and the grow step are validated on synthetic data only; their
   thresholds (50, 10%, 20 rows, cosine 0.8) are defaults to calibrate on real embeddings.
 - BF16 paths change some labels (809 of 200k at k = 1024 on the bench data); they stay opt-in.
-- Language bindings (Python, Node.js, Go) are planned, not built ([crate layout](/decisions/crate-layout.md)).
+- Language bindings exist for Python, Node.js, Go, C and WebAssembly, each byte-identical to Rust ([bindings](/design/bindings.md), [web](/design/web.md)); none is published to a package registry yet, so they build from source.
 
 [^upstream]: The original package as fetched for the benchmarks; its NumPy files are byte-identical to `reference/faiss_e_means`.
