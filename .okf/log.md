@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-13
+* **Update**: The embedding library is now `candle-embeddings` (was `encoder`): renamed in [language bindings](design/bindings.md) and [adding a backend](recipes/adding-an-emeans-backend.md).
 * **Update**: [language bindings](design/bindings.md): shipped binaries remap $HOME and drop debug info; `check-home-paths.sh` in the build tasks (before: 38-96 home paths per artifact, after: 0). [Bindings vs native Rust](results/bindings-bench.md): Linux box results.
 * **Creation**: [WebAssembly vs native](results/wasm-bench.md): wasm `gemm` (now the binding's default) takes 2.8-3.4x the time of native one-thread `fused` on the Xeon; wasm `fused` gives the same centroid bits as native at every shape, on x86-64 and aarch64, in Node and Chrome. **Update**: [web version](design/web.md): default kernel `gemm`, which wasm kernel matches which native kernel (golden tests on both hosts), home paths remapped out of the `.wasm`; [getting started](getting-started.md) points to `bindings/wasm`.
 * **Creation**: [bindings vs native Rust](results/bindings-bench.md): Mac results (CPU and Metal), byte-identical everywhere; the box run is pending.

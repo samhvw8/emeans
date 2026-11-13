@@ -159,7 +159,7 @@ From the second CUDA pass on the RTX 3060 (the first pass is steps 1, 2, 4-7 abo
 | Comparing CPU timings of a CPU-only build with a build that links candle's CUDA | Box 200k x 1024 `cpu-fused`: 1.78 s (old, no CUDA) vs 2.09 s (new, `cuda` + candle baselines) looked like a regression from the crate split; the new code without candle CUDA ran 1.81 s[^cpu-kernels] | candle forces cudarc `dynamic-linking`; loading the CUDA libraries alone (`LD_PRELOAD`) costs the same 8-12%, at 32 threads but not at 1. Keep candle's CUDA out of CPU benchmark binaries (`cuda-baselines` is separate) |
 | x86 box: scatter columns split by each cluster's row count | 2.7-3.1 ms either way[^cpu-kernels] | Not imbalance: the scattered 3 KB row reads (~20 GB/s) bound it |
 
-[^tensorfold]: Same format as TensorFold's family recipe and the encoder library's family recipe.
+[^tensorfold]: Same format as TensorFold's family recipe and the candle-embeddings library's family recipe.
 [^ops]: `cargo run --release -p emeans-bench --bin ops_bench -- --backend metal|cuda|cuda-bf16 --k 1024` (and `EMEANS_CUDA_TILE`, `EMEANS_CUDA_PARTS`, `EMEANS_CUDA_GATHER` for the sweeps); median of 5-9 reps, synced after each op.
 [^core-results]: [Core engine results](/results/core-engine.md): whole training runs, median of 5 seeds.
 [^compare]: [Host-loop baseline](/results/compare-mac-ubuntu.md).

@@ -164,5 +164,5 @@ flock for shared machines.
   or tested there.
 - CUDA: every binding has a `cuda` feature that forwards to `emeans/cuda`; built from source
   only, not tested through the bindings.
-- The plan also lists `encoder`'s `embed_images` / `embed_texts` for the bindings; they belong
-  to the `encoder` repo and are not part of these bindings.
+- The plan also lists `candle-embeddings`'s `embed_images` / `embed_texts` for the bindings; they belong
+  to the `candle-embeddings` repo and are not part of these bindings.
