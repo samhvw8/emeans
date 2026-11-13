@@ -24,6 +24,7 @@ incremental updates with stable cluster ids, near-duplicate groups and exact kNN
 ## Contents
 
 [Quickstart](#quickstart) ·
+[Fixed k or automatic k](#fixed-k-or-automatic-k) ·
 [Features](#features) ·
 [Backends and platforms](#backends-and-platforms) ·
 [Benchmarks](#benchmarks) ·
@@ -208,6 +209,42 @@ In Node.js, load the module with `initSync`. Full example:
 [`bindings/wasm/examples/quickstart.mjs`](bindings/wasm/examples/quickstart.mjs)
 (`mise run example:wasm` in `bindings/wasm`); browser demo: `mise run demo`.
 Guide: [`bindings/wasm`](bindings/wasm/README.md).
+
+## Fixed k or automatic k
+
+You choose per call; nothing else changes. Both work on the same data, backends and languages.
+
+| You want | Call | You get |
+|---|---|---|
+| Exactly k clusters | `train(data, d, k)` | a model with k centroids; `assign` labels new rows |
+| k chosen for you | `auto_cluster(data, d)` | a two-level hierarchy (broad groups, then leaves) and its labels |
+
+Use a fixed k when you know how many groups you need (a quantizer, a fixed number of buckets, a
+comparison with another k-means). Use automatic k when you don't: it sweeps k, picks it with
+silhouette (level 1) and Davies-Bouldin (leaves), splits leaves that are too large, and stays flat
+when the data has no broad structure.
+
+Automatic k can be bounded rather than left fully free:
+
+| Option | Default | Effect |
+|---|---|---|
+| `k1_range` | (2, 40) | range of the level-1 sweep; `(8, 8)` fixes 8 broad groups and still picks the leaves |
+| `k2_max` | 20 | largest number of leaves per group |
+| `min_cluster_size` / `max_cluster_size` | 20 / 200 | the leaf sizes it prefers; larger leaves are split again |
+
+```python
+m = emeans.train(x, 64)                                   # exactly 64 clusters
+h, labels = emeans.auto_cluster(x)                        # k chosen for you
+h, labels = emeans.auto_cluster(x, k1_range=(5, 12), k2_max=8)  # bounded
+```
+
+The option names are the same in Node.js (`{ k1_range: [5, 12], k2_max: 8 }`), Go
+(`&emeans.AutoConfig{K1Range: [2]int{5, 12}, K2Max: 8}`) and the C API (JSON); WebAssembly uses
+camelCase (`{ k1Range: [5, 12], k2Max: 8 }`).
+
+New data later: a fixed-k model labels new rows with `assign` (or keeps training from its saved
+state); an automatic-k hierarchy takes them with `add`, which keeps cluster ids stable and can grow
+a new leaf for a new group ([how it works](.okf/design/autok-incremental-dedup.md)).
 
 ## Features
 
