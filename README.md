@@ -308,25 +308,32 @@ Rust crate: the binding tests check it, and the benchmark driver fails otherwise
 
 ## Benchmarks
 
-Synthetic data, d = 768, `train` time, median of 3 to 5 seeds, faiss and emeans run interleaved on
-the same machine. faiss column: its fastest implementation on that hardware.
+Baseline: faiss `contrib/e_means`, its fastest implementation on each machine (NumPy, torch or
+Triton). Synthetic data, d = 768, `train` time in seconds, **lower is better**. Median of 3 to 5
+seeds, faiss and emeans run interleaved on the same machine.
 
-| 200,000 rows, k = 1024 | faiss | emeans | Source |
-|---|---|---|---|
-| M1 Pro, CPU ¹ | 1.80 s (torch) | about 1.0 to 1.2 s (Accelerate) | [summary](.okf/results/improvements-over-faiss.md), [CPU](.okf/results/cpu-kernels.md) |
-| M1 Pro, GPU | does not run (MPS has no float64) | **0.74 s** (Metal) | [Metal](.okf/results/metal-kernels.md#results) |
-| 2x Xeon E5-2683 v4, CPU | 3.73 s (torch, oneDNN) | **1.83 s** (`cpu-fused`) | [CPU](.okf/results/cpu-kernels.md#final-sweeps) |
-| RTX 3060, exact FP32 | 0.31 s (Triton FP32) | **0.16 s** | [CUDA](.okf/results/cuda-kernels.md) |
-| RTX 3060, BF16 (faiss default, emeans opt-in) | 0.15 s (Triton BF16) | **0.10 s** | [CUDA](.okf/results/cuda-kernels.md) |
+| 200,000 rows, k = 1024 | Baseline: faiss | emeans | emeans is faster by | Source |
+|---|---|---|---|---|
+| M1 Pro, CPU ¹ | 1.80 s (torch) | about 1.0 to 1.2 s (Accelerate) | about 1.5 to 1.8x ¹ | [summary](.okf/results/improvements-over-faiss.md), [CPU](.okf/results/cpu-kernels.md) |
+| M1 Pro, GPU | does not run (MPS has no float64) | **0.74 s** (Metal) | runs where faiss cannot | [Metal](.okf/results/metal-kernels.md#results) |
+| 2x Xeon E5-2683 v4, CPU | 3.73 s (torch, oneDNN) | **1.83 s** (`cpu-fused`) | **2.0x** | [CPU](.okf/results/cpu-kernels.md#final-sweeps) |
+| RTX 3060, exact FP32 | 0.31 s (Triton FP32) | **0.16 s** | **1.9x** | [CUDA](.okf/results/cuda-kernels.md) |
+| RTX 3060, BF16 (faiss default, emeans opt-in) | 0.15 s (Triton BF16) | **0.10 s** | **1.5x** | [CUDA](.okf/results/cuda-kernels.md) |
 
 ¹ A lighter check on a busy workstation: faiss from one seed, emeans from an interleaved A/B of
 old and new builds. Treat it as a range, not a ratio.
 
-| 1,000,000 rows, k = 1024 | faiss | emeans | Source |
-|---|---|---|---|
-| 2x Xeon E5-2683 v4, CPU | 18.31 s (torch) | **6.92 s** | [CPU](.okf/results/cpu-kernels.md#final-sweeps) |
-| RTX 3060, exact FP32 | 1.38 s (Triton FP32) | **0.62 s** | [CUDA](.okf/results/cuda-kernels.md) |
-| RTX 3060, BF16 | 0.60 s (Triton BF16) | **0.39 s** | [CUDA](.okf/results/cuda-kernels.md) |
+| 1,000,000 rows, k = 1024 | Baseline: faiss | emeans | emeans is faster by | Source |
+|---|---|---|---|---|
+| 2x Xeon E5-2683 v4, CPU | 18.31 s (torch) | **6.92 s** | **2.6x** | [CPU](.okf/results/cpu-kernels.md#final-sweeps) |
+| RTX 3060, exact FP32 | 1.38 s (Triton FP32) | **0.62 s** | **2.2x** | [CUDA](.okf/results/cuda-kernels.md) |
+| RTX 3060, BF16 | 0.60 s (Triton BF16) | **0.39 s** | **1.5x** | [CUDA](.okf/results/cuda-kernels.md) |
+
+What made it faster than the baseline: kernels that find the nearest centroid inside the matrix
+multiply instead of writing the full score matrix, a training loop that keeps data and centroids on
+the GPU, and on CUDA an FP16 tensor-core screen with an exact FP32 re-check (same labels as plain
+FP32). Quality does not change: the objective stays within 0.43% of faiss
+([how it differs](#how-it-differs-from-faiss)).
 
 Through the bindings (200,000 x 768, Linux box): `train` from Python, Node.js and Go took -9% to
 +6% of the time of native Rust ([results](.okf/results/bindings-bench.md)).
